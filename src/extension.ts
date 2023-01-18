@@ -409,7 +409,7 @@ function formatterWithOptions(options: vscode.TextEditorOptions, langId: string)
     }
 
     // We have two different CommentPolicy settings - one for JSON and one for JSONC.
-    const relevantCommentSetting = (langId=="json")? config.v3.CommentPolicyForJSON : config.v3.CommentPolicyForJSONC;
+    const relevantCommentSetting = (langId==="json")? config.v3.CommentPolicyForJSON : config.v3.CommentPolicyForJSONC;
     switch (relevantCommentSetting) {
         case "TreatAsError":
             formatter.Options.CommentPolicy = CommentPolicy.TreatAsError;
@@ -472,7 +472,7 @@ function formatterWithOptionsNoAlign(options: vscode.TextEditorOptions, langId: 
     }
 
     // We have two different CommentPolicy settings - one for JSON and one for JSONC.
-    const relevantCommentSetting = (langId=="json")? config.v3.CommentPolicyForJSON : config.v3.CommentPolicyForJSONC;
+    const relevantCommentSetting = (langId==="json")? config.v3.CommentPolicyForJSON : config.v3.CommentPolicyForJSONC;
     switch (relevantCommentSetting) {
         case "TreatAsError":
             formatter.Options.CommentPolicy = CommentPolicy.TreatAsError;
