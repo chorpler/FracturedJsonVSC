@@ -21,9 +21,17 @@ export function activate(context: vscode.ExtensionContext) {
         formatJsonDocument);
     context.subscriptions.push(fdReg);
 
+    const fdRegNa = vscode.commands.registerTextEditorCommand('fracturedjsonvsc.formatJsonDocumentNoAlign',
+        formatJsonDocumentNoAlign);
+    context.subscriptions.push(fdRegNa);
+
     const fsReg = vscode.commands.registerTextEditorCommand('fracturedjsonvsc.formatJsonSelection',
         formatJsonSelection);
     context.subscriptions.push(fsReg);
+
+    const fsRegNa = vscode.commands.registerTextEditorCommand('fracturedjsonvsc.formatJsonSelectionNoAlign',
+        formatJsonSelection);
+    context.subscriptions.push(fsRegNa);
 
     const minReg = vscode.commands.registerTextEditorCommand('fracturedjsonvsc.minifyJsonDocument',
         minifyJsonDocument);
@@ -72,6 +80,33 @@ function formatJsonDocument(textEditor: vscode.TextEditor, edit: vscode.TextEdit
 
 
 /**
+ * Attempts to format the entire contents of the editor as JSON. (Called as a command.)
+ */
+function formatJsonDocumentNoAlign(textEditor: vscode.TextEditor, edit: vscode.TextEditorEdit) {
+    try {
+        const oldText = textEditor.document.getText();
+        const formatter = formatterWithOptionsNoAlign(textEditor.options, textEditor.document.languageId);
+
+        let newText = formatter.Reformat(oldText) ?? "";
+
+        // Delete the whole old doc and then insert the new one.  This avoids weird selection issues.
+        edit.delete(new vscode.Range(0, 0, textEditor.document.lineCount + 1, 0));
+        edit.insert(new vscode.Position(0, 0), newText);
+    }
+    catch (err: any) {
+        const [message, docOffset] = processError(err);
+        if (message) {
+            vscode.window.showErrorMessage('FracturedJson: ' + message);
+        }
+        if (docOffset !== undefined) {
+            const editorPos = textEditor.document.positionAt(docOffset);
+            textEditor.selection = new vscode.Selection(editorPos, editorPos);
+        }
+    }
+}
+
+
+/**
  * Attempts to format the selected text.  The selection should either be a complete JSON element - possibly with
  * comments - or a collection of elements such that adding [] or {} makes them complete.
  * (Called as a command.)
@@ -86,6 +121,27 @@ function formatJsonSelection(textEditor: vscode.TextEditor, edit: vscode.TextEdi
     const originalIndents = getOriginalIndentation(textEditor.document, trimmedSelection);
 
     const formatter = formatterWithOptions(textEditor.options, textEditor.document.languageId);
+    const newPartialText = formatPartialDocument(trimmedContent, originalIndents, formatter);
+    if (newPartialText) {
+        edit.replace(trimmedSelection, newPartialText);
+    }
+}
+
+/**
+ * Attempts to format the selected text.  The selection should either be a complete JSON element - possibly with
+ * comments - or a collection of elements such that adding [] or {} makes them complete.
+ * (Called as a command.)
+ */
+function formatJsonSelectionNoAlign(textEditor: vscode.TextEditor, edit: vscode.TextEditorEdit) {
+    // Trim leading and trailing whitespace from the selection, to reduce whitespace hassles.
+    const trimmedSelection = trimRange(textEditor.document, textEditor.selection);
+    const trimmedContent = textEditor.document.getText(trimmedSelection);
+
+    // Take note of the indentation on the first line of the selection.  This is from the start of the line to
+    // the first character on the line, whether that's part of the selection or not.
+    const originalIndents = getOriginalIndentation(textEditor.document, trimmedSelection);
+
+    const formatter = formatterWithOptionsNoAlign(textEditor.options, textEditor.document.languageId);
     const newPartialText = formatPartialDocument(trimmedContent, originalIndents, formatter);
     if (newPartialText) {
         edit.replace(trimmedSelection, newPartialText);
@@ -337,6 +393,69 @@ function formatterWithOptions(options: vscode.TextEditorOptions, langId: string)
     formatter.Options.CommentPadding = config.v3.CommentPadding;
 
     formatter.Options.DontJustifyNumbers = config.v3.DontJustifyNumbers;
+    formatter.Options.PreserveBlankLines = config.v3.PreserveBlankLines;
+    formatter.Options.AllowTrailingCommas = config.v3.AllowTrailingCommas;
+
+    switch (config.v3.StringWidthPolicy) {
+        case "CharacterCount": {
+            formatter.StringLengthFunc = Formatter.StringLengthByCharCount;
+            break;
+        }
+        case "EastAsianFullWidth":
+        default: {
+            formatter.StringLengthFunc = wideCharStringLength;
+            break;
+        }
+    }
+
+    // We have two different CommentPolicy settings - one for JSON and one for JSONC.
+    const relevantCommentSetting = (langId=="json")? config.v3.CommentPolicyForJSON : config.v3.CommentPolicyForJSONC;
+    switch (relevantCommentSetting) {
+        case "TreatAsError":
+            formatter.Options.CommentPolicy = CommentPolicy.TreatAsError;
+            break;
+        case "Remove":
+            formatter.Options.CommentPolicy = CommentPolicy.Remove;
+            break;
+        case "Preserve":
+        default:
+            formatter.Options.CommentPolicy = CommentPolicy.Preserve;
+            break;
+    }
+
+    // Use the editor's built-in mechanisms for tabs/spaces.
+    formatter.Options.IndentSpaces = Number(options.tabSize);
+    formatter.Options.UseTabToIndent = !options.insertSpaces;
+
+    return formatter;
+}
+
+/**
+ * Returns a new FracturedJson instance with settings pulled from the workspace
+ * configuration, but without aligning.
+ * @returns A configured FracturedJson object, with all alignment options set to false
+ */
+function formatterWithOptionsNoAlign(options: vscode.TextEditorOptions, langId: string) {
+    const formatter = new Formatter();
+
+    // These settings come straight from our plugin's options.
+    const config = vscode.workspace.getConfiguration('fracturedjsonvsc');
+
+    formatter.Options.MaxInlineLength = config.v3.MaxInlineLength;
+    formatter.Options.MaxTotalLineLength = config.v3.MaxTotalLineLength;
+    formatter.Options.MaxInlineComplexity = config.v3.MaxInlineComplexity;
+    formatter.Options.MaxCompactArrayComplexity = config.v3.MaxCompactArrayComplexity;
+    formatter.Options.MaxTableRowComplexity = config.v3.MaxTableRowComplexity;
+    formatter.Options.MinCompactArrayRowItems = config.v3.MinCompactArrayRowItems;
+    formatter.Options.AlwaysExpandDepth = config.v3.AlwaysExpandDepth;
+
+    formatter.Options.NestedBracketPadding = false;
+    formatter.Options.SimpleBracketPadding = false;
+    formatter.Options.ColonPadding = false;
+    formatter.Options.CommaPadding = false;
+    formatter.Options.CommentPadding = false;
+
+    formatter.Options.DontJustifyNumbers = true;
     formatter.Options.PreserveBlankLines = config.v3.PreserveBlankLines;
     formatter.Options.AllowTrailingCommas = config.v3.AllowTrailingCommas;
 

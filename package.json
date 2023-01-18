@@ -1,9 +1,9 @@
 {
     "name": "fracturedjsonvsc",
-    "displayName": "FracturedJson",
+    "displayName": "FracturedJsonDs",
     "description": "A JSON formatter that produces human-readable but fairly compact output.",
     "publisher": "j-brooke",
-    "version": "3.0.0",
+    "version": "3.1.0",
     "engines": {
         "vscode": "^1.57.0"
     },
@@ -28,7 +28,9 @@
     "icon": "images/logo_256.png",
     "activationEvents": [
         "onCommand:fracturedjsonvsc.formatJsonDocument",
+        "onCommand:fracturedjsonvsc.formatJsonDocumentNoAlign",
         "onCommand:fracturedjsonvsc.formatJsonSelection",
+        "onCommand:fracturedjsonvsc.formatJsonSelectionNoAlign",
         "onCommand:fracturedjsonvsc.minifyJsonDocument",
         "onCommand:fracturedjsonvsc.nearMinifyJsonDocument",
         "onLanguage:json",
@@ -42,8 +44,16 @@
                 "title": "Format JSON Document"
             },
             {
+                "command": "fracturedjsonvsc.formatJsonDocumentNoAlign",
+                "title": "Format JSON Document (No Align)"
+            },
+            {
                 "command": "fracturedjsonvsc.formatJsonSelection",
                 "title": "Format JSON Selection"
+            },
+            {
+                "command": "fracturedjsonvsc.formatJsonSelectionNoAlign",
+                "title": "Format JSON Selection (No Align)"
             },
             {
                 "command": "fracturedjsonvsc.minifyJsonDocument",
