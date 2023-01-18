@@ -111,6 +111,7 @@ out
 # VScode
 .vscode
 .history
+.vscode-test
 
 # ASDF
 .tool-versions
