@@ -225,11 +225,11 @@
         "glob": "^7.1.7",
         "mocha": "^10.1.0",
         "typescript": "^4.3.2",
-        "vscode-test": "^1.5.2"
+        "@vscode/test-electron": "^2.2.2"
     },
     "dependencies": {
+        "@vscode/vsce": "^2.16.0",
         "eastasianwidth": "^0.2.0",
-        "fracturedjsonjs": "^3.0.0",
-        "vsce": "^2.13.0"
+        "fracturedjsonjs": "^3.0.0"
     }
 }
