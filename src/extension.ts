@@ -8,6 +8,7 @@
 
 import * as vscode from 'vscode';
 import {CommentPolicy, Formatter, FracturedJsonError} from 'fracturedjsonjs';
+import { log, debugLog } from "./logger";
 
 // @ts-ignore
 import * as eaw from 'eastasianwidth';
@@ -16,6 +17,11 @@ import * as eaw from 'eastasianwidth';
  * Called by VSCode when the extension is first used.
  */
 export function activate(context: vscode.ExtensionContext) {
+    log.appendLine("=================================");
+    log.appendLine("FracturedJSON extension activated");
+    log.appendLine("=================================");
+    log.appendLine("\n");
+    
     // Set up some regular commands.
     const fdReg = vscode.commands.registerTextEditorCommand('fracturedjsonvsc.formatJsonDocument',
         formatJsonDocument);
@@ -30,7 +36,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(fsReg);
 
     const fsRegNa = vscode.commands.registerTextEditorCommand('fracturedjsonvsc.formatJsonSelectionNoAlign',
-        formatJsonSelection);
+        formatJsonSelectionNoAlign);
     context.subscriptions.push(fsRegNa);
 
     const minReg = vscode.commands.registerTextEditorCommand('fracturedjsonvsc.minifyJsonDocument',
@@ -40,6 +46,10 @@ export function activate(context: vscode.ExtensionContext) {
     const nearReg = vscode.commands.registerTextEditorCommand('fracturedjsonvsc.nearMinifyJsonDocument',
         nearMinifyJsonDocument);
     context.subscriptions.push(nearReg);
+
+    const nearMinSel = vscode.commands.registerTextEditorCommand('fracturedjsonvsc.nearMinifyJsonSelection',
+        nearMinifyJsonSelection);
+    context.subscriptions.push(nearMinSel);
 
     // Register with the official formatting API to provide both whole-document and selection formatting.
     vscode.languages.registerDocumentRangeFormattingEditProvider(['json', 'jsonc'],
@@ -86,6 +96,10 @@ function formatJsonDocumentNoAlign(textEditor: vscode.TextEditor, edit: vscode.T
     try {
         const oldText = textEditor.document.getText();
         const formatter = formatterWithOptionsNoAlign(textEditor.options, textEditor.document.languageId);
+
+        log.appendLine("formatJsonDocumentNoAlign(): Formatter is:");
+        log.appendLine(JSON.stringify(formatter));
+        log.appendLine(`\n\n`);
 
         let newText = formatter.Reformat(oldText) ?? "";
 
@@ -142,6 +156,9 @@ function formatJsonSelectionNoAlign(textEditor: vscode.TextEditor, edit: vscode.
     const originalIndents = getOriginalIndentation(textEditor.document, trimmedSelection);
 
     const formatter = formatterWithOptionsNoAlign(textEditor.options, textEditor.document.languageId);
+    log.appendLine("formatJsonSelectionNoAlign(): Formatter is:");
+    log.appendLine(JSON.stringify(formatter, null, 2));
+
     const newPartialText = formatPartialDocument(trimmedContent, originalIndents, formatter);
     if (newPartialText) {
         edit.replace(trimmedSelection, newPartialText);
@@ -162,8 +179,7 @@ function minifyJsonDocument(textEditor: vscode.TextEditor, edit: vscode.TextEdit
 
         edit.delete(new vscode.Range(0, 0, textEditor.document.lineCount + 1, 0));
         edit.insert(new vscode.Position(0, 0), newText);
-    }
-    catch (err: any) {
+    } catch (err: any) {
         const [message, docOffset] = processError(err);
         if (message) {
             vscode.window.showErrorMessage('FracturedJson: ' + message);
@@ -200,12 +216,141 @@ function nearMinifyJsonDocument(textEditor: vscode.TextEditor, edit: vscode.Text
         formatter.Options.NestedBracketPadding = false;
         formatter.Options.CommentPadding = false;
 
+        let trimText = oldText.trim();
+        if(trimText.slice(0,1) === "[") {
+            formatter.Options.AlwaysExpandDepth = 0;
+        } else {
+            formatter.Options.AlwaysExpandDepth = 1;
+        }
+
         const newText = formatter.Reformat(oldText) ?? "";
 
         edit.delete(new vscode.Range(0, 0, textEditor.document.lineCount + 1, 0));
         edit.insert(new vscode.Position(0, 0), newText);
+    } catch (err: any) {
+        const [message, docOffset] = processError(err);
+        if (message) {
+            vscode.window.showErrorMessage('FracturedJson: ' + message);
+        }
+        if (docOffset !== undefined) {
+            const editorPos = textEditor.document.positionAt(docOffset);
+            textEditor.selection = new vscode.Selection(editorPos, editorPos);
+        }
     }
-    catch (err: any) {
+}
+
+/**
+ * Attempts to format the whole document as nearly-minified JSON.  Children of the root element begin on their own
+ * lines, but are themselves minified.  The gives you a still compact file, but the the user can easily select
+ * a sub-element and possibly expand it with Format Selection.  (If the settings require preserving comments and/or
+ * blank lines, children of the root might take up more than one line.)
+ * (Called as a command.)
+ */
+function nearMinifyJsonSelection(textEditor: vscode.TextEditor, edit: vscode.TextEditorEdit) {
+    try {
+        // // Trim leading and trailing whitespace from the selection, to reduce whitespace hassles.
+        // const trimmedSelection = trimRange(textEditor.document, textEditor.selection);
+        // const trimmedContent = textEditor.document.getText(trimmedSelection);
+
+        // // Take note of the indentation on the first line of the selection.  This is from the start of the line to
+        // // the first character on the line, whether that's part of the selection or not.
+        // const originalIndents = getOriginalIndentation(textEditor.document, trimmedSelection);
+
+        // const formatter = formatterWithOptionsNoAlign(textEditor.options, textEditor.document.languageId);
+        // log.appendLine("formatJsonSelectionNoAlign(): Formatter is:");
+        // log.appendLine(JSON.stringify(formatter, null, 2));
+
+        // const newPartialText = formatPartialDocument(trimmedContent, originalIndents, formatter);
+        // if (newPartialText) {
+        //     edit.replace(trimmedSelection, newPartialText);
+        // }
+        const originalSelection = textEditor.selection;
+        const trimmedSelection = trimRange(textEditor.document, originalSelection);
+        const trimmedContent = textEditor.document.getText(trimmedSelection);
+        const selectedLines = trimmedContent.split("\n");
+        log.appendLine(`nearMinifyJsonSelection(): Selection is:`);
+        log.appendLine(JSON.stringify(selectedLines));
+        log.appendLine(`\n\n`);
+        const formatter = formatterWithOptionsNoAlign(textEditor.options, textEditor.document.languageId);
+        formatter.Options.MaxInlineLength = Number.MAX_VALUE;
+        formatter.Options.MaxTotalLineLength = Number.MAX_VALUE;
+        formatter.Options.MaxInlineComplexity = Number.MAX_VALUE;
+        formatter.Options.MaxCompactArrayComplexity = -1;
+        formatter.Options.MaxTableRowComplexity = -1;
+        formatter.Options.AlwaysExpandDepth = 0;
+        formatter.Options.IndentSpaces = 0;
+        formatter.Options.UseTabToIndent = false;
+        formatter.Options.CommaPadding = false;
+        formatter.Options.ColonPadding = false;
+        formatter.Options.SimpleBracketPadding = false;
+        formatter.Options.NestedBracketPadding = false;
+        formatter.Options.CommentPadding = false;
+        log.appendLine("nearMinifyJsonSelection(): Formatter is:");
+        log.appendLine(JSON.stringify(formatter));
+        log.appendLine(`\n\n`);
+        let results = "";
+        let idx = 0;
+        for(let line of selectedLines) {
+            // Take note of the indentation on the first line of the selection.  This is from the start of the line to
+            // the first character on the line, whether that's part of the selection or not.
+            const originalIndents = getOriginalIndentation(textEditor.document, trimmedSelection);
+            log.appendLine("nearMinifyJsonSelection(): OriginalIndents is:");
+            log.appendLine(`~ ${originalIndents} ~`);
+            log.appendLine(`\n\n`);
+                // const lineContent = textEditor.document.getText()
+            const newLineText = formatPartialDocument(line, originalIndents, formatter);
+            log.appendLine(`${idx+1}: newLineText is:`);
+            log.appendLine(newLineText || "");
+            log.appendLine(`\n`);
+            if(newLineText) {
+                // if(idx !== 0 && !newLineText.startsWith(originalIndents)) {
+                if(!newLineText.startsWith(originalIndents)) {
+                    results += originalIndents;
+                }
+                results += newLineText;
+                results += "\n";
+            }
+            idx++;
+        }
+        if(results.endsWith(`\n\n`)) {
+            results = results.slice(0,-1);
+        }
+        if(results) {
+            log.appendLine(`nearMinifyJsonSelection(): Replacing:`);
+            log.appendLine(trimmedContent);
+            log.appendLine(`\n\nWITH:`);
+            edit.replace(originalSelection, results);
+            log.appendLine(results);
+            log.appendLine(`\n\n`);
+        }
+
+        // const newPartialText = formatPartialDocument(trimmedContent, originalIndents, formatter);
+        // if (newPartialText) {
+        //     edit.replace(trimmedSelection, newPartialText);
+        // }
+
+
+        // const oldText = textEditor.document.getText();
+        // const formatter = formatterWithOptions(textEditor.options, textEditor.document.languageId);
+        // formatter.Options.MaxInlineLength = Number.MAX_VALUE;
+        // formatter.Options.MaxTotalLineLength = Number.MAX_VALUE;
+        // formatter.Options.MaxInlineComplexity = Number.MAX_VALUE;
+        // formatter.Options.MaxCompactArrayComplexity = -1;
+        // formatter.Options.MaxTableRowComplexity = -1;
+        // formatter.Options.AlwaysExpandDepth = 0;
+        // formatter.Options.IndentSpaces = 0;
+        // formatter.Options.UseTabToIndent = false;
+        // formatter.Options.CommaPadding = false;
+        // formatter.Options.ColonPadding = false;
+        // formatter.Options.SimpleBracketPadding = false;
+        // formatter.Options.NestedBracketPadding = false;
+        // formatter.Options.CommentPadding = false;
+
+        // const newText = formatter.Reformat(oldText) ?? "";
+
+        // edit.delete(new vscode.Range(0, 0, textEditor.document.lineCount + 1, 0));
+        // edit.insert(new vscode.Position(0, 0), newText);
+    } catch (err: any) {
         const [message, docOffset] = processError(err);
         if (message) {
             vscode.window.showErrorMessage('FracturedJson: ' + message);
@@ -270,8 +415,7 @@ function formatPartialDocument(originalText: string, prefixWhitespace: string,
     // See if we can parse/reformat the selected text as a single top-level element (and possibly comments and blanks).
     try {
         return formatter.Reformat(originalText, 0)?.trim() ?? "";
-    }
-    catch (err1: any) {
+    } catch (err1: any) {
         // Do nothing - fall through
     }
 
@@ -298,8 +442,7 @@ function formatPartialDocument(originalText: string, prefixWhitespace: string,
     try {
         const fakeArray = "[" + originalText + "\n]";
         fakeContainerOutput = formatter.Reformat(fakeArray, -1);
-    }
-    catch (err2: any) {
+    } catch (err2: any) {
         // Do nothing - fall through
     }
 
@@ -307,8 +450,7 @@ function formatPartialDocument(originalText: string, prefixWhitespace: string,
         try {
             const fakeArray = "{" + originalText + "\n}";
             fakeContainerOutput = formatter.Reformat(fakeArray, -1);
-        }
-        catch (err3: any) {
+        } catch (err3: any) {
             // Do nothing - fall through
         }
     }
@@ -487,6 +629,8 @@ function formatterWithOptionsNoAlign(options: vscode.TextEditorOptions, langId: 
     }
 
     // Use the editor's built-in mechanisms for tabs/spaces.
+    // formatter.Options.IndentSpaces = Number(options.tabSize);
+    // formatter.Options.UseTabToIndent = !options.insertSpaces;
     formatter.Options.IndentSpaces = Number(options.tabSize);
     formatter.Options.UseTabToIndent = !options.insertSpaces;
 

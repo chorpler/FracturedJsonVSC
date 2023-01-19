@@ -62,11 +62,21 @@
             {
                 "command": "fracturedjsonvsc.nearMinifyJsonDocument",
                 "title": "Near-minify JSON Document"
+            },
+            {
+                "command": "fracturedjsonvsc.nearMinifyJsonSelection",
+                "title": "Near-minify JSON Selection"
             }
         ],
         "configuration": {
             "title": "FracturedJson",
             "properties": {
+                "fracturedjsonvsc.v3.DebugOutput": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Show debug output in a FracturedJSON output window",
+                    "order": 10
+                },
                 "fracturedjsonvsc.v3.MaxInlineLength": {
                     "type": "number",
                     "default": 999999999,
