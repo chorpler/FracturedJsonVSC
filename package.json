@@ -27,12 +27,6 @@
     "license": "MIT",
     "icon": "images/logo_256.png",
     "activationEvents": [
-        "onCommand:fracturedjsonvsc.formatJsonDocument",
-        "onCommand:fracturedjsonvsc.formatJsonDocumentNoAlign",
-        "onCommand:fracturedjsonvsc.formatJsonSelection",
-        "onCommand:fracturedjsonvsc.formatJsonSelectionNoAlign",
-        "onCommand:fracturedjsonvsc.minifyJsonDocument",
-        "onCommand:fracturedjsonvsc.nearMinifyJsonDocument",
         "onLanguage:json",
         "onLanguage:jsonc"
     ],
